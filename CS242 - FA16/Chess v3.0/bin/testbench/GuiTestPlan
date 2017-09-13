@@ -1,0 +1,28 @@
+Things to test: 
+-Movement/board updating 
+-Piece ownership
+-Capturing 
+-Move counter
+-Game timer
+-Active player 
+-New Game button
+
+Features to possibly add: 
+-Show pieces that are removed from play on the side
+-Show a list of all moves in chronological order 
+
+Test Script: 
+	For this week: 
+		Open eclipse
+		Run Gui.java main
+		See that the original configuration is correct. 
+		Make sure buttons are clickable
+		
+	For future weeks: 
+		Try to move a piece and see if the board highlights all valid spaces.
+		Try to move to a valid position and see that the board updates correctly. 
+		Try to move to an invalid position and make sure the board doesn't change. 
+		See that the board displays the correct # of moves, time, and the correct player.
+		Make sure 'New Game' starts a new game. 
+		Make sure you can select your piece and move it to a valid empty position.
+		Make sure you can select your piece and move it to a valid occupied position.
