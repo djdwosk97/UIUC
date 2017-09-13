@@ -1,0 +1,2337 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1344\cocoasubrtf720
+{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural
+
+\f0\fs24 \cf0 .data\
+\
+\
+#			TODO 1  expand the wait list to 4+4+4+4(two parameters)\
+#				 2  expand the execution list to 4+4+4	\
+# movement memory-mapped I/O\
+VELOCITY            = 0xffff0010\
+ANGLE               = 0xffff0014\
+ANGLE_CONTROL       = 0xffff0018\
+\
+# coordinates memory-mapped I/O\
+BOT_X               = 0xffff0020\
+BOT_Y               = 0xffff0024\
+\
+OTHER_BOT_X			=0xffff00a0\
+OTHER_BOT_Y			=0xffff00a4\
+\
+# planet memory-mapped I/O\
+PLANETS_REQUEST     = 0xffff1014\
+\
+# scanning memory-mapped I/O\
+SCAN_REQUEST        = 0xffff1010\
+SCAN_SECTOR         = 0xffff101c\
+\
+# gravity memory-mapped I/O\
+FIELD_STRENGTH      = 0xffff1100\
+\
+# bot info memory-mapped I/O\
+SCORES_REQUEST      = 0xffff1018\
+ENERGY              = 0xffff1104\
+\
+# debugging memory-mapped I/O\
+PRINT_INT           = 0xffff0080\
+\
+TIMER = 0xffff001c\
+TIMER_MASK = 0x8000\
+TIMER_ACK = 0xffff006c\
+BONK_MASK			=0x1000\
+BONK_ACK			=0xffff0060\
+\
+# interrupt constants\
+SCAN_MASK           = 0x2000\
+SCAN_ACKNOWLEDGE    = 0xffff1204\
+ENERGY_MASK         = 0x4000\
+ENERGY_ACKNOWLEDGE  = 0xffff1208  \
+\
+# puzzle interface locations \
+SPIMBOT_PUZZLE_REQUEST 		= 0xffff1000 \
+SPIMBOT_SOLVE_REQUEST 		= 0xffff1004 \
+SPIMBOT_LEXICON_REQUEST 	= 0xffff1008 \
+\
+# I/O used in competitive scenario \
+INTERFERENCE_MASK 	= 0x0400 \
+INTERFERENCE_ACK 	= 0xffff1304  \
+SPACESHIP_FIELD_CNT  	= 0xffff110c \
+\
+FLIP_FIELD_FREQ	=10000\
+\
+\
+BLINK_ON_INTERVAL=10000\
+BLINK_OFF_INTERVAL=100000\
+# sector constants\
+SECTOR_HALF         = 18\
+SECTOR_SIZE         = 37\
+SECTORS_PER_ROW     = 8\
+NUM_SECTORS         = 64\
+\
+MOVE_TIME_INTERVAL  = 100\
+CHECK_DUST_TIME_INTERVAL=1000\
+SOLVE_PUZZLE_TIME_INTERVAL=700000\
+# has to be smaller than 1000\
+SCAN_TIME_INTERVAL	= 1000\
+FIELD_ON_TIME_INTERVAL = 29000\
+ALERT_INTERVAL = 100\
+ALERT_DELAY_INTERVAL = 100\
+#has to be very big\
+\
+# strategy constants\
+\
+# there's nothing special about these numbers\
+# (except that they're all powers of two) ...\
+# they were just derived from trial and error\
+GO_BACK_WAIT_CYCLE= 50			#wait time spent on our planet to drop the dust\
+DUST_FIELD_STRENGTH = 10\
+CHASE_VELOCITY      = 10\
+#CHASE_VELOCITY      = 4\
+#DUST_WAIT_CYCLES    = 8192\
+DUST_WAIT_CYCLES    = 20000\
+CHASE_ITERATIONS    = 2048\
+\
+#\
+DUST_THRESHOLD=1\
+#1000\
+\
+#ALERT_DISTANCE_1=100\
+ALERT_DISTANCE_2=15000\
+\
+ALERT_DISTANCE_3=9970\
+\
+MY_DISTANCE_1=100\
+MY_DISTANCE_2=100\
+\
+HIDE_WAIT_CYCLES=50000\
+#can be very small\
+\
+\
+EXECUTION_ARRAY_SIZE = 600		\
+EXECUTION_ARRAY_BLOCK=12\
+#   (4 + 4 + 4) * 5 = 12 * 5 = 600\
+#	5 * 4 =20\
+\
+WAIT_HEAP_BLOCK= 16\
+# 4 + 4 + 4 + 4= 16		\
+# 4 + 4 = 8 \
+\
+\
+MOVE_OFFSET=0\
+SCAN_OFFSET=4\
+DECISION_OFFSET=8\
+\
+\
+\
+# global variables\
+\
+scan_done:\
+	.word 0\
+\
+dust:\
+	.space 256\
+\
+planets:\
+	.space 32\
+	\
+execution_array:\
+	.space 600\
+#	600=12*50		\
+\
+wait_heap:\
+	.space 800			# 50 * 16=800\
+\
+wait_heap_size:\
+	.space 4\
+\
+new_best_sector:\
+	.space 4\
+\
+sector_center_return1:\
+	.space 4\
+\
+sector_center_return2:\
+	.space 4\
+\
+execution_head:\
+	.space 4\
+\
+execution_tail:\
+	.space 4\
+\
+align_done:\
+	.space 4\
+\
+go_back_progress:\
+	.space 4\
+\
+time_interrupt_flag:\
+	.space 4\
+\
+\
+bot_field_count:\
+	.space 4\
+\
+\
+force_field_flag:\
+	.space 4\
+\
+checkpoint_flag:\
+	.space 4\
+\
+blink_switch:\
+	.space 4\
+\
+other_bot_old_distance_to_planet:\
+	.space 4\
+\
+destx:  .space 4\
+desty:  .space 4\
+three:	.float	3.0\
+five:	.float	5.0\
+PI:	.float	3.141592\
+F180:	.float  180.0\
+\
+.align 2\
+alloc:		.space 334800		#for alloc trie function\
+\
+.align 2\
+alloc_offset: .space 4\
+\
+.align 2\
+counter:	.space 4			#counting number of words in trie\
+\
+.align 2\
+lexicon:	.space 4096			#holding dictionary\
+\
+.align 2\
+puzzle:		.space 4104			#puzzle struct\
+\
+.align 2\
+solution:	.space 1024			#solution struct\
+\
+word:		.space 31			#comparison word\
+\
+\
+\
+\
+.text\
+#  \
+sb_arctan:\
+	li	$v0, 0		# angle = 0;\
+\
+	abs	$t0, $a0	# get absolute values\
+	abs	$t1, $a1\
+	ble	$t1, $t0, no_TURN_90	  \
+\
+	## if (abs(y) > abs(x)) \{ rotate 90 degrees \}\
+	move	$t0, $a1	# int temp = y;\
+	neg	$a1, $a0	# y = -x;      \
+	move	$a0, $t0	# x = temp;    \
+	li	$v0, 90		# angle = 90;  \
+\
+no_TURN_90:\
+	bgez	$a0, pos_x 	# skip if (x >= 0)\
+\
+	## if (x < 0) \
+	add	$v0, $v0, 180	# angle += 180;\
+\
+pos_x:\
+	mtc1	$a0, $f0\
+	mtc1	$a1, $f1\
+	cvt.s.w $f0, $f0	# convert from ints to floats\
+	cvt.s.w $f1, $f1\
+	\
+	div.s	$f0, $f1, $f0	# float v = (float) y / (float) x;\
+\
+	mul.s	$f1, $f0, $f0	# v^^2\
+	mul.s	$f2, $f1, $f0	# v^^3\
+	l.s	$f3, three	# load 5.0\
+	div.s 	$f3, $f2, $f3	# v^^3/3\
+	sub.s	$f6, $f0, $f3	# v - v^^3/3\
+\
+	mul.s	$f4, $f1, $f2	# v^^5\
+	l.s	$f5, five	# load 3.0\
+	div.s 	$f5, $f4, $f5	# v^^5/5\
+	add.s	$f6, $f6, $f5	# value = v - v^^3/3 + v^^5/5\
+\
+	l.s	$f8, PI		# load PI\
+	div.s	$f6, $f6, $f8	# value / PI\
+	l.s	$f7, F180	# load 180.0\
+	mul.s	$f6, $f6, $f7	# 180.0 * value / PI\
+\
+	cvt.w.s $f6, $f6	# convert "delta" back to integer\
+	mfc1	$t0, $f6\
+	add	$v0, $v0, $t0	# angle += delta\
+\
+	jr 	$ra\
+\
+\
+\
+# GO IN STRAIGHT LINE ##########################\
+\
+set_dest:\
+        sub     $sp, $sp, 4\
+        sw      $ra, 0($sp)\
+\
+        # remember where I'm going\
+        sw      $a0, destx\
+        sw      $a1, desty\
+        \
+        jal     turntoward\
+\
+		#la	$t1,CHASE_VELOCITY\
+		li	$t0, CHASE_VELOCITY  \
+		sw   $t0, VELOCITY\
+       \
+		\
+        lw      $ra, 0($sp)\
+        add     $sp, $sp, 4\
+        jr      $ra\
+\
+# points toward destination and\
+#       stops if it has to do more than a 90 degree turn\
+# returns new angle of travel or -1 if the ship stops\
+stay_on_path:\
+        sub     $sp, $sp, 4\
+        sw      $ra, 0($sp)\
+\
+        lw      $t4, ANGLE\
+        jal     turntoward\
+\
+        # if angle changed more than 90 degrees, jump to halt_bot\
+        sub     $t0, $t4, $v0\
+        abs     $t0, $t0\
+\
+  		lw      $t0, BOT_X\
+        lw     	$t1, destx\
+        sub     $a0, $t1, $t0   # x' - x (right is positive)\
+		abs		$a0,$a0\
+\
+        lw      $t0, BOT_Y\
+        lw     	$t1, desty\
+        sub     $a1, $t1, $t0   # y - y' (down is positive)\
+		abs		$a1,$a1\
+		\
+		add		$a0,$a0,$a1\
+		beq		$a0,$0,halt_bot\
+        #li      $t1, 90\
+        #bge     $t0, $t1, halt_bot\
+\
+        lw      $ra, 0($sp)\
+        add     $sp, $sp, 4\
+        jr      $ra\
+\
+halt_bot:\
+        # stop\
+        sw   $0, VELOCITY\
+        li   $v0, -1\
+\
+        lw      $ra, 0($sp)\
+        add     $sp, $sp, 4\
+        jr   $ra\
+\
+\
+# sets and returns new angle of travel based on destx & desty\
+# returns new angle of travel\
+turntoward:\
+        sub     $sp, $sp, 4\
+        sw      $ra, 0($sp)\
+\
+        lw      $t0, BOT_X\
+        lw     	$t1, destx\
+        sub     $a0, $t1, $t0   # x' - x (right is positive)\
+\
+        lw      $t0, BOT_Y\
+        lw     $t1, desty\
+        sub     $a1, $t1, $t0   # y - y' (down is positive)\
+\
+		beq		$a0,0,turntoward_x_0								# check if they are both 0\
+		j 		turntoward_xy_ok\
+turntoward_x_0:\
+		beq		$a1,0,turntoward_y_0								# check if they are both 0\
+		j 		turntoward_xy_ok\
+turntoward_y_0:\
+		li		$t0,90\
+		sw      $t0, ANGLE\
+        li      $t0, 0\
+        sw      $t0, ANGLE_CONTROL\
+		j		turntoward_end\
+\
+turntoward_xy_ok:\
+\
+		jal     sb_arctan\
+\
+\
+				\
+\
+        sw      $v0, ANGLE\
+        li      $t0, 1\
+        sw      $t0, ANGLE_CONTROL\
+\
+		\
+		\
+turntoward_end:\
+\
+        lw      $ra, 0($sp)\
+        add     $sp, $sp, 4\
+        jr      $ra\
+\
+\
+# heap ###################################################\
+#	time 4\
+#	address	4\
+leftChild:\
+	# size_t $a0=   currentIdx\
+	#    return (currentIdx+1)*2-1;\
+\
+	add	$v0,$a0,1\
+	mul	$v0,$v0,2\
+	sub	$v0,$v0,1	\
+	jr	$ra\
+\
+\
+\
+rightChild:\
+	# size_t $a0=   currentIdx\
+	#    return (currentIdx+1)*2;\
+	add	$v0,$a0,1\
+	mul	$v0,$v0,2	\
+	jr	$ra\
+\
+    \
+parent:\
+	# size_t $a0=   currentIdx\
+	#        return (currentIdx+1)/2-1;\
+	add	$v0,$a0,1\
+	div	$v0,$v0,2	\
+	sub	$v0,$v0,1\
+	jr	$ra\
+\
+hasAChild:\
+	# size_t $a0=   currentIdx\
+#	return leftChild(currentIdx)+1<=_elems.size();\
+\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+\
+	jal leftChild\
+	add	$t0,$v0,1\
+	\
+	lw	$t1, wait_heap_size\
+	ble	$t0, $t1, hasAChild_true\
+	li	$v0, 0\
+	j	hasAChild_end\
+hasAChild_true:\
+	li	$v0, 1\
+hasAChild_end:\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+\
+	jr	$ra\
+\
+\
+maxPriorityChild:\
+	# size_t $a0=   currentIdx\
+\
+#	size_t leftChildIdx=leftChild(currentIdx);\
+#	size_t rightChildIdx=rightChild(currentIdx);\
+#	if(rightChildIdx+1>_elems.size()) return leftChildIdx;\
+#	//what if there is only one child???\
+	\
+#	if(higherPriority(_elems[leftChildIdx],_elems[rightChildIdx]))\
+#	\{\
+#		return leftChildIdx;\
+#	\}	\
+		\
+#   return rightChildIdx;\
+\
+	sub	$sp, $sp, 16\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+	sw	$s2, 12($sp)						# just in case they will change $a0\
+		\
+	move	$s2,$a0\
+	jal	leftChild\
+	move	$s0,$v0\
+	move	$a0,$s2\
+	jal	rightChild\
+	move	$s1,$v0\
+	\
+	add	$t0,$s1,1\
+	lw	$t1, wait_heap_size\
+	bgt	$t0, $t1, maxPriorityChild_returnLeft\
+	\
+	mul	$t0,$s0,WAIT_HEAP_BLOCK\
+	la	$t2,wait_heap\
+	add	$t0,$t0,$t2\
+	lw	$a0,0($t0)\
+	\
+	mul	$t1,$s1,WAIT_HEAP_BLOCK\
+	add	$t1,$t1,$t2\
+	lw	$a1,0($t1)\
+\
+	jal	higherPriority\
+	beq	$v0,$zero,maxPriorityChild_returnRight\
+	\
+\
+maxPriorityChild_returnLeft:\
+	move	$v0, $s0\
+	j	maxPriorityChild_end\
+\
+maxPriorityChild_returnRight:\
+	move	$v0, $s1\
+\
+maxPriorityChild_end:\
+	lw	$s0, 4($sp)\
+	lw	$s1, 8($sp)\
+	lw	$s2, 12($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 16	\
+	jr	$ra		\
+\
+\
+\
+\
+higherPriority:\
+	li	$v0,1\
+	ble	$a0, $a1,higherPriority_end 			# if time1<time2   return time1  else time2\
+	li	$v0,0\
+higherPriority_end:	\
+	jr	$ra		\
+\
+\
+swap:\
+	mul	$t0,$a0,WAIT_HEAP_BLOCK\
+	la	$t1,wait_heap\
+	add	$t0,$t0,$t1\
+	lw	$t1,0($t0)\
+	lw	$t2,4($t0)\
+	lw	$t6,8($t0)\
+	lw	$t7,12($t0)\
+	\
+	\
+	mul	$t3,$a1,WAIT_HEAP_BLOCK\
+	la	$t4,wait_heap\
+	add	$t3,$t3,$t4\
+	lw	$t4,0($t3)\
+	lw	$t5,4($t3)\
+	lw	$t8,8($t3)\
+	lw	$t9,12($t3)\
+\
+	sw	$t4,0($t0)\
+	sw	$t5,4($t0)\
+	sw	$t8,8($t0)\
+	sw	$t9,12($t0)\
+	\
+	\
+	sw	$t1,0($t3)\
+	sw	$t2,4($t3)\
+	sw	$t6,8($t3)\
+	sw	$t7,12($t3)\
+\
+	jr	$ra		\
+\
+\
+\
+heapifyDown:\
+	\
+	# $a0= size_t currentIdx \
+\
+	# if( !hasAChild(currentIdx) )\
+    #    return;\
+    #size_t maxChildIdx = maxPriorityChild( currentIdx );\
+    #if( higherPriority(  _elems[ maxChildIdx ],_elems[ currentIdx ] ) ) \{\
+    #   std::swap(  _elems[ maxChildIdx ],_elems[ currentIdx ] );\
+    #    heapifyDown( maxChildIdx );\
+    #\}\
+	\
+	sub	$sp, $sp, 12\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+		\
+	move	$s0, $a0			# s0 currentIdx\
+	jal	hasAChild\
+	beq	$v0,$zero, heapifyDown_end\
+	\
+	move	$a0,$s0		\
+	#jal	maxChildIdx			\
+	jal		maxPriorityChild\
+	move	$s1,$v0		  #size_t maxChildIdx = maxPriorityChild( currentIdx );  s1\
+\
+\
+	mul	$t0,$s1,WAIT_HEAP_BLOCK\
+	la	$t2,wait_heap\
+	add	$t0,$t0,$t2\
+	lw	$a0,0($t0)\
+	\
+	mul	$t1,$s0,WAIT_HEAP_BLOCK	\
+	add	$t1,$t1,$t2\
+	lw	$a1,0($t1)\
+\
+	jal	higherPriority						# ok at least higherPriority doesn't change a0 or a1\
+	beq	$v0,$zero,heapifyDown_end				\
+	\
+	move	$a0, $s1\
+	move	$a1, $s0\
+	jal	swap\
+	move	$a0, $s1\
+	jal	heapifyDown\
+	\
+	\
+heapifyDown_end:\
+	lw	$s1, 8($sp)\
+	lw	$s0, 4($sp)	\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 12\
+\
+	jr	$ra		\
+	\
+\
+\
+heapifyUp:\
+	# $a0 size_t currentIdx \
+    #if( currentIdx == root() )\
+    #    return;\
+    #size_t parentIdx = parent( currentIdx );\
+    #if( higherPriority( _elems[ currentIdx ], _elems[ parentIdx ] ) ) \{\
+    #    std::swap( _elems[ currentIdx ], _elems[ parentIdx ] );\
+    #    heapifyUp( parentIdx );\
+    #\}\
+\
+	sub	$sp, $sp, 12\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+		\
+	beq	$a0,$zero, heapifyUp_end\
+	\
+	move	$s0,$a0		\
+	jal	parent			\
+	move	$s1,$v0		 \
+\
+\
+	mul	$t0,$s0,WAIT_HEAP_BLOCK\
+	la	$t2,wait_heap\
+	add	$t0,$t0,$t2\
+	lw	$a0,0($t0)\
+	\
+	mul	$t1,$s1,WAIT_HEAP_BLOCK\
+	add	$t1,$t1,$t2\
+	lw	$a1,0($t1)\
+\
+	jal	higherPriority						# ok at least higherPriority doesn't change a0 or a1\
+	beq	$v0,$zero,heapifyUp_end				\
+	\
+	move	$a0, $s0\
+	move	$a1, $s1\
+	jal	swap\
+	move	$a0, $s1\
+	jal	heapifyUp\
+	\
+	\
+heapifyUp_end:\
+	lw	$s1, 8($sp)\
+	lw	$s0, 4($sp)	\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 12\
+\
+	jr	$ra		\
+\
+\
+\
+\
+wait_heap_pop:\
+	#T tmp=_elems[root()];\
+	#std::swap(  _elems[ _elems.size()-1 ],_elems[ root() ] );\
+	#_elems.pop_back();\
+	#heapifyDown(root());\
+    #return tmp;\
+\
+	sub	$sp, $sp,20\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+	sw	$s2, 12($sp)\
+	sw	$s3, 16($sp)\
+	\
+	la	$t0,wait_heap				# return the top one\
+	lw	$s0,0($t0)\
+	lw	$s1,4($t0)\
+	lw	$s2,8($t0)\
+	lw	$s3,12($t0)\
+	\
+	lw	$a0,wait_heap_size\
+	sub	$a0,$a0,1	\
+	li	$a1,0\
+	jal	swap\
+\
+	lw	$t0,wait_heap_size			# size--;  pop the last one out\
+	sub	$t0,$t0,1\
+	sw	$t0,wait_heap_size\
+\
+	li	$a0,0	\
+	jal	heapifyDown\
+\
+	move	$a0,$s0\
+	move	$a1,$s1\
+	move	$a2,$s2\
+	move	$a3,$s3\
+		\
+	lw	$s0, 4($sp)\
+	lw	$s1, 8($sp)\
+	lw	$s2, 12($sp)\
+	lw	$s3, 16($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 20\
+	jr	$ra		\
+\
+\
+\
+wait_heap_peek:\
+	la	$t0,wait_heap				# return the top one\
+	lw	$a0,0($t0)\
+	lw	$a1,4($t0)\
+	lw	$a2,8($t0)\
+	lw	$a3,12($t0)\
+    \
+	#return  _elems[ root() ];\
+	jr	$ra		\
+\
+\
+\
+wait_heap_push:\
+	#a0 = ( const T & elem ) \{\
+    #_elems.push_back(elem);\
+	#heapifyUp(_elems.size()-1);\
+	\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+	\
+	lw	$t1,wait_heap_size\
+	\
+\
+	mul	$t0,$t1,WAIT_HEAP_BLOCK\
+	la	$t2,wait_heap\
+	add	$t0,$t0,$t2\
+\
+\
+	sw	$a0,0($t0)\
+	sw	$a1,4($t0)\
+	sw	$a2,8($t0)\
+	sw	$a3,12($t0)\
+\
+	add	$t1,$t1,1					# size ++\
+	sw	$t1,wait_heap_size\
+	\
+	sub	$a0,$t1,1				#  	heapifyUp(_elems.size()-1);\
+	jal	heapifyUp\
+		\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+\
+	jr	$ra		\
+\
+\
+\
+# align ################################################################\
+#\
+# aligns a bot in a coordinate, busy waiting till complete\
+# argument $a0: the target coordinate\
+# argument $a1: 0 for aligning in X, 1 for aligning in Y\
+#\
+## // in_y = 0 means align in X, in_y = 1 means align in Y\
+## void align(int target, int in_y) \{\
+##     // 0xffff0020 is bot X, 0xffff0024 is bot Y\
+##     // since they're adjacent, we can treat as int array and get\
+##     // bot_coords[0] is X, bot_coords[1] is Y\
+##     int * bot_coords = (int *) 0xffff0020;\
+##\
+##     int base_angle = in_y * 90; // 0 for X, 90 for Y\
+##     int turn = (target < bot_coords[in_y]) * 180;\
+##     SET_ABSOLUTE_ANGLE(base_angle + turn);\
+## \
+##     while (target != bot_coords[in_y]) \{\
+##         // wait\
+##     \}\
+## \}\
+\
+align:\
+	mul	$t0, $a1, 90		# base angle (0 for X, 90 for Y)\
+	mul	$a1, $a1, 4		# addressing int arrays\
+\
+	lw	$t1, BOT_X($a1)		# bot coordinate\
+	slt	$t1, $a0, $t1		# target above or to the left\
+	mul	$t1, $t1, 180		# flip bot if needed\
+	add	$t1, $t0, $t1\
+	sw	$t1, ANGLE\
+	li	$t1, 1\
+	sw	$t1, ANGLE_CONTROL\
+\
+\
+	lw	$t1, BOT_X($a1)		# bot coordinate\
+	bne	$a0, $t1, align_not_done\
+	sw	$zero, align_done\
+align_not_done:\
+\
+	jr	$ra\
+\
+\
+# align_planet #########################################################\
+#\
+# aligns with a planet in a coordinate, busy waiting till complete\
+# argument $a0: 0 for aligning in X, 1 for aligning in Y\
+#\
+## planet_info_t planets[2];\
+## \
+## // in_y = 0 means align in X, in_y = 1 means align in Y\
+## void align_planet(int in_y) \{\
+##     // 0xffff0020 is bot X, 0xffff0024 is bot Y\
+##     // since they're adjacent, we can treat as int array and get\
+##     // bot_coords[0] is X, bot_coords[1] is Y\
+##     int * bot_coords = (int *) 0xffff0020;\
+## \
+##     // first two elements of planet_info_t are X and Y\
+##     // so same trick works for those\
+##     int * planet_coords = (int *) planets;\
+## \
+##     int base_angle = in_y * 90; // 0 for X, 90 for Y\
+## \
+##     while (true) \{\
+##         PLANETS_REQUEST(planets);\
+##         if (planet_coords[in_y] == bot_coords[in_y]) \{\
+##             return;\
+##         \}\
+## \
+##         // if planet is above us or to the left, we add 180 to base angle\
+##         int turn = (planet_coords[in_y] < bot_coords[in_y]) * 180;\
+##         SET_ABSOLUTE_ANGLE(base_angle + turn);\
+##     \}\
+## \}\
+\
+align_planet:\
+	mul	$t0, $a0, 90		# base angle (0 for X, 90 for Y)\
+	mul	$a0, $a0, 4		# addressing int arrays\
+\
+ap_loop:\
+	la	$t1, planets\
+	sw	$t1, PLANETS_REQUEST	# get updated coordinates\
+	lw	$t1, planets($a0)	# planet coordinate\
+	lw	$t2, BOT_X($a0)		# bot coordinate\
+	beq	$t1, $t2, ap_done\
+\
+	slt	$t1, $t1, $t2		# planet above or to the left\
+	mul	$t1, $t1, 180		# flip bot if needed\
+	add	$t1, $t0, $t1\
+	sw	$t1, ANGLE\
+	li	$t1, 1\
+	sw	$t1, ANGLE_CONTROL\
+	j	ap_loop\
+\
+ap_done:\
+	jr	$ra\
+\
+\
+# find_best_sector #####################################################\
+#\
+# scans all sections for the one with the most dust\
+# return $v0: the sector ID\
+\
+find_best_sector:\
+	li	$t0, 0			# current sector to scan\
+	la	$a0, dust		# array to store into\
+	move	$t1, $a0		# current array position\
+	li	$v0, -1			# current best sector\
+	li	$v1, -1			# current best dust amount\
+\
+fbs_loop:\
+	sw	$zero, scan_done\
+	sw	$t0, SCAN_SECTOR\
+	sw	$a0, SCAN_REQUEST\
+\
+fbs_wait:\
+	lw	$t2, scan_done\
+	beq	$t2, 0, fbs_wait\
+\
+	lw	$t2, 0($t1)		# dust in scanned sector\
+	ble	$t2, $v1, fbs_next	# if not better than current best\
+	move	$v0, $t0		# new best sector\
+	move	$v1, $t2		# new best dust amount\
+\
+fbs_next:		\
+\
+	add	$t0, $t0, 1\
+	add	$t1, $t1, 4\
+	blt	$t0, 64, fbs_loop\
+	sw	$v0, new_best_sector\
+\
+	jr	$ra\
+\
+\
+# get_sector_center ####################################################\
+#\
+# gets the center coordinates for a sector\
+# argument $a0: the sector number\
+# return $v0: sector center X\
+# return $v1: sector center Y\
+solve_puzzle:\
+	sub $sp, $sp, 40\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw 	$s1, 8($sp)\
+	sw	$s2, 12($sp)\
+	sw	$s3, 16($sp)\
+	sw	$s4, 20($sp)\
+	sw	$s5, 24($sp)\
+	sw	$s6, 28($sp)\
+	sw	$s7, 32($sp)\
+	sw	$s8, 36($sp)\
+\
+	#Get Lexicon\
+	la	$t0, lexicon\
+	sw	$t0, SPIMBOT_LEXICON_REQUEST\
+\
+	#Build Trie\
+	add	$a0, $t0, 4\
+	lw	$a1, 0($t0)\
+	jal build_trie\
+	move $s0, $v0		## s0 = root\
+\
+	la		$a2,checkpoint_0\
+	jal	execution_push\
+	j	loop\
+checkpoint_0:\
+\
+	#READ ONE LINE TEST\
+TEST:\
+	#Get Puzzle\
+	la	$t0, puzzle\
+	sw	$t0, SPIMBOT_PUZZLE_REQUEST\
+\
+	#Prepare solution struct\
+	la	$s5, solution\
+\
+	#Loop through the puzzle\
+	li	$t1, 0\
+	sw	$t1, counter\
+	sw	$t1, alloc_offset\
+	\
+						## s0 = root of trie\
+	li	$s1, 0			## s1 = i\
+						## s2 = j\
+						## s3 = word index\
+	la	$s4, word		## s4 = word to compare\
+						## s5 = solution\
+	lw	$s6, 4($t0)		## s6 = num_columns\
+	lw	$t3, 0($t0)\
+	mul	$s7, $t3, $s6	## s7 = puzzle length\
+	add	$s8, $t0, 8		## s8 = puzzle\
+	\
+p_iloop:\
+	bge $s1, $s7, p_iloop_done		#for(int i = 0; i < puzzle length; i++)\
+	add	$t0, $s8, $s1\
+	## byte vs. word\
+	lb	$t0, 0($t0)					#char x = puzzle[i];\
+	sb 	$t0, 0($s4)					#char * horizontal_word = x\
+\
+	##checking left to right\
+	add	$s2, $s1, 1\
+	li	$s3, 1						#//set index to one\
+p_jloop_one:\
+	div	$s2, $s6\
+	mfhi $t0	\
+	beq	$t0, 0, p_jloop_one_done	#for(int j = i + 1; j % num_columns != 0; j++)\
+	add	$t0, $s2, $s8\
+	lb	$t0, 0($t0)					#char y = puzzle[j]\
+	add	$t1, $s4, $s3\
+	sb	$t0, 0($t1)					#horizontal_word = horizontal_word + y\
+	add	$t1, $t1, 1\
+	sb	$0, 0($t1)					#//make it null terminated\
+	## lookup_word_in_trie(trie_t *trie, const char *word)\
+	move $a0, $s0\
+	move $a1, $s4\
+	jal lookup_word_in_trie			#char * word = lookup(horizontal_word);\
+	beq	$v0, $0, p_jloop_one_skip	#if(word != NULL)\
+\
+	lw	$t0, counter				#save(i,j)\
+	mul $t0, $t0, 2\
+	mul	$t0, $t0, 4\
+	add	$t0, $t0, 4\
+	add	$t0, $t0, $s5\
+	sw	$s1, 0($t0)\
+	sw	$s2, 4($t0)\
+\
+	lw	$t0, counter				#words++\
+	add	$t0, $t0, 1\
+	sw	$t0, counter\
+	#j	p_jloop_one_done\
+	j	p_iloop_done\
+\
+p_jloop_one_skip:\
+	add	$s2, $s2, 1					#increment j\
+	add	$s3, $s3, 1\
+	j p_jloop_one\
+\
+p_jloop_one_done:\
+	#j	p_iloop_done\
+	la		$a2,checkpoint_1\
+	jal	execution_push\
+	j	loop\
+checkpoint_1:\
+	j	TEST\
+\
+\
+\
+	#lw      $a0, TIMER\
+    #add     $a0, $a0, SOLVE_PUZZLE_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+    #la      $a1, checkpoint_1\
+	#jal wait_heap_push\
+	\
+	#Checking up to down\
+	add	$s2, $s1, $s6					#//reset loop conditions\
+	li	$s3, 1						\
+p_jloop_two:\
+	bge	$s2, $s7, p_jloop_two_done	#for(int j = i + num_cols; j < puzzle size; j += num_cols)\
+	add	$t0, $s2, $s8\
+	lb	$t0, 0($t0)					#char y = puzzle[j]\
+	add	$t1, $s4, $s3\
+	sb	$t0, 0($t1)					#vertical_word = vertical_word + y\
+	add	$t1, $t1, 1\
+	sb	$0, 0($t1)					#//make it null terminated\
+	## lookup_word_in_trie(trie_t *trie, const char *word)\
+	move $a0, $s0\
+	move $a1, $s4\
+	jal lookup_word_in_trie			#char * word = lookup(vertical_word);\
+	beq	$v0, $0, p_jloop_two_skip	#if(word != NULL)\
+\
+	lw	$t0, counter				#save(i,j)\
+	mul $t0, $t0, 2\
+	mul	$t0, $t0, 4\
+	add	$t0, $t0, 4\
+	add	$t0, $t0, $s5\
+	sw	$s1, 0($t0)\
+	sw	$s2, 4($t0)\
+\
+	lw	$t0, counter				#words++\
+	add	$t0, $t0, 1\
+	sw	$t0, counter\
+	j	p_jloop_two_done\
+p_jloop_two_skip:\
+	add	$s2, $s2, $s6				#increment j\
+	add	$s3, $s3, 1\
+	j p_jloop_two\
+p_jloop_two_done:\
+\
+\
+#j checkpoint_2\
+	#lw      $a0, TIMER\
+    #add     $a0, $a0, SOLVE_PUZZLE_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+    #la      $a1, checkpoint_2\
+	#jal wait_heap_push\
+	la		$a2,checkpoint_2\
+	jal	execution_push	\
+	j	loop\
+checkpoint_2:\
+\
+\
+	#checking right to left\
+	sub	$s2, $s1, 1					#//reset loop conditions\
+	li	$s3, 1						\
+p_jloop_three:\
+	div	$s2, $s6\
+	mfhi $t0	\
+	beq	$t0, 1, p_jloop_three_done	#for(int j = i - 1; j % num_columns != 1; j--)\
+	blt	$s2, $0, p_jloop_three_done\
+	add	$t0, $s2, $s8\
+	lb	$t0, 0($t0)					#char y = puzzle[j]\
+	add	$t1, $s4, $s3\
+	sb	$t0, 0($t1)					#backwards_word = backwards_word + y\
+	add	$t1, $t1, 1\
+	sb	$0, 0($t1)					#//make it null terminated\
+	## lookup_word_in_trie(trie_t *trie, const char *word)\
+	move $a0, $s0\
+	move $a1, $s4\
+	jal lookup_word_in_trie			#char * word = lookup(backwards_word);\
+	beq	$v0, $0, p_jloop_three_skip	#if(word != NULL)\
+\
+	lw	$t0, counter				#save(i,j)\
+	mul $t0, $t0, 2\
+	mul	$t0, $t0, 4\
+	add	$t0, $t0, 4\
+	add	$t0, $t0, $s5\
+	sw	$s1, 0($t0)\
+	sw	$s2, 4($t0)\
+\
+	lw	$t0, counter				#words++\
+	add	$t0, $t0, 1\
+	sw	$t0, counter\
+	j	p_jloop_three_done\
+p_jloop_three_skip:\
+	sub	$s2, $s2, 1					#increment j\
+	add	$s3, $s3, 1\
+	j p_jloop_three\
+p_jloop_three_done:\
+\
+#j checkpoint_3\
+\
+\
+	#lw      $a0, TIMER\
+    #add     $a0, $a0, SOLVE_PUZZLE_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+	#la      $a1, checkpoint_3\
+	#jal wait_heap_push\
+	la		$a2,checkpoint_3\
+	jal	execution_push	\
+	j	loop\
+checkpoint_3:\
+	#checking down to up\
+	sub	$s2, $s1, $s6					#//reset loop conditions\
+	li	$s3, 1						\
+p_jloop_four:\
+	blt	$s2, 0, p_jloop_four_done	#for(int j = i - num_cols; j >= 0; j-= num_cols)\
+	add	$t0, $s2, $s8\
+	lb	$t0, 0($t0)					#char y = puzzle[j]\
+	add	$t1, $s4, $s3\
+	sb	$t0, 0($t1)					#backwards_word = backwards_word + y\
+	add	$t1, $t1, 1\
+	sb	$0, 0($t1)					#//make it null terminated\
+	## lookup_word_in_trie(trie_t *trie, const char *word)\
+	move $a0, $s0\
+	move $a1, $s4\
+	jal lookup_word_in_trie			#char * word = lookup(backwards_word);\
+	beq	$v0, $0, p_jloop_four_skip	#if(word != NULL)\
+\
+	lw	$t0, counter				#save(i,j)\
+	mul $t0, $t0, 2\
+	mul	$t0, $t0, 4\
+	add	$t0, $t0, 4\
+	add	$t0, $t0, $s5\
+	sw	$s1, 0($t0)\
+	sw	$s2, 4($t0)\
+\
+	lw	$t0, counter				#words++\
+	add	$t0, $t0, 1\
+	sw	$t0, counter\
+	j	p_jloop_four_done\
+p_jloop_four_skip:\
+	sub	$s2, $s2, $s6					#increment j\
+	add	$s3, $s3, 1\
+	j p_jloop_four\
+p_jloop_four_done:\
+\
+#j checkpoint_4\
+\
+	#lw      $a0, TIMER\
+    #add     $a0, $a0, SOLVE_PUZZLE_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+    #la      $a1, checkpoint_4\
+	#jal wait_heap_push\
+\
+	la		$a2,checkpoint_4\
+	jal	execution_push	\
+	j	loop\
+checkpoint_4:		\
+\
+test:\
+	add	$s1, $s1, 1					#//iterate through i\
+	j p_iloop\
+p_iloop_done:\
+	\
+	#finally fucking submit solution\
+	lw	$t0, counter\
+	sw	$t0, 0($s5)\
+	sw	$s5, SPIMBOT_SOLVE_REQUEST\
+\
+	#lw	$t0, TIMER\
+	#sw	$t0, PRINT_INT\
+	j	TEST\
+\
+\
+	lw	$ra, 0($sp)\
+	lw	$s0, 4($sp)\
+	lw 	$s1, 8($sp)\
+	lw	$s2, 12($sp)\
+	lw	$s3, 16($sp)\
+	lw	$s4, 20($sp)\
+	lw	$s5, 24($sp)\
+	lw	$s6, 28($sp)\
+	lw	$s7, 32($sp)\
+	lw	$s8, 36($sp)\
+	add $sp, $sp, 40\
+\
+	jr	$ra\
+###################################################################\
+## build_trie(const char **wordlist, int num_words) \{\
+build_trie:\
+	sub	$sp, $sp, 16\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+	sw	$s2, 12($sp)\
+	move	$s0, $a0		# wordlist\
+\
+	mul	$t0, $a1, 4			# num_words * 4\
+	add	$s1, $s0, $t0		# &wordlist[num_words]\
+	jal	alloc_trie\
+	move	$s2, $v0		# root\
+\
+bt_loop:\
+	beq	$s0, $s1, bt_done	# loop till end of array\
+	move	$a0, $s2		# root\
+	lw	$a1, 0($s0)			# wordlist[i]\
+	li	$a2, 0\
+	jal	add_word_to_trie\
+	add	$s0, $s0, 4			# next word\
+	j	bt_loop\
+\
+bt_done:\
+	move	$v0, $s2		# root\
+	lw	$ra, 0($sp)\
+	lw	$s0, 4($sp)\
+	lw	$s1, 8($sp)\
+	lw	$s2, 12($sp)\
+	add	$sp, $sp, 16\
+	jr	$ra\
+###################################################################\
+## add_word_to_trie(trie_t *trie, const char *word, int index) \{\
+add_word_to_trie:\
+	sub $sp, $sp, 20\
+	sw $ra, 0($sp)\
+	sw $a0, 4($sp)\
+	sw $a1, 8($sp)\
+	sw $a2, 12($sp)\
+	\
+	#get c\
+	add $t0, $a1, $a2\
+	lb $t0, 0($t0)\
+\
+	#first if statement\
+	bne $t0, $0, adttcont\
+	sw $a1, 0($a0)\
+	lw $ra, 0($sp)\
+	add $sp, $sp, 20\
+	jr $ra\
+\
+adttcont:\
+	sub $t0, $t0, 'A'\
+	mul $t0, $t0, 4\
+	add $t1, $a0, 4\
+	add $t0, $t0, $t1\
+	lw $t1, 0($t0)\
+\
+	bne $t1, $0, adttcont2\
+	sw $t0, 16($sp)\
+	jal alloc_trie\
+	lw $t0, 16($sp)\
+	sw $v0, 0($t0)\
+\
+adttcont2:\
+	lw $ra, 0($sp)\
+	lw $a0, 0($t0)\
+	lw $a1, 8($sp)\
+	lw $a2, 12($sp)\
+	add $a2, $a2, 1\
+	add $sp, $sp, 20\
+	j add_word_to_trie\
+###################################################################\
+## lookup_word_in_trie(trie_t *trie, const char *word) \{\
+lookup_word_in_trie:\
+	bne $a0, $0, first_cont		#first if statement\
+	move $v0, $0\
+	jr $ra						#return null\
+\
+first_cont:\
+	lw $t0, 0($a0)\
+	beq $t0, $0, second_cont	#second if statement\
+	move $v0, $t0\
+	jr $ra						#return trie->word\
+\
+second_cont:\
+	#SOMETHING WRONG HERE\
+	lb $t0, 0($a1)  			#initializing c\
+	sub $t0, $t0, 'A'			#subtracting 'A'\
+\
+	#if c<0 or c >= 26 return NULL\
+	blt $t0, $0, or_handle\
+	bge $t0, 26, or_handle\
+\
+	add $t1, $a0, 4				#initialize next_trie\
+	mul $t2, $t0, 4\
+	add $t1, $t1, $t2\
+	lw $t1, 0($t1)\
+	add $a1, $a1, 1\
+	move $a0, $t1\
+	j lookup_word_in_trie\
+\
+or_handle:\
+	move $v0, $0\
+	jr $ra\
+###################################################################\
+alloc_trie:\
+	#li	$v0, SBRK			##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\
+	#li	$a0, 108			# sizeof(trie_t)\
+	#syscall				# $v0 = ret_val\
+\
+	lw	$t0, alloc_offset\
+	add	$t2, $t0, 1\
+	sw	$t2, alloc_offset\
+	mul	$t0, $t0, 108\
+	la	$t1, alloc\
+	add	$v0, $t0, $t1\
+\
+	sw	$zero, 0($v0)		# ret_val->word = NULL\
+	li	$t0, 0				# i = 0\
+\
+at_loop:\
+	mul	$t1, $t0, 4			# i * 4\
+	add	$t1, $v0, $t1		# &ret_val->next[i] - 4\
+	sw	$zero, 4($t1)		# ret_val->next[i] = NULL\
+	add	$t0, $t0, 1			# i ++\
+	blt	$t0, 26, at_loop	# i < 26\
+\
+	jr	$ra\
+###################################################################\
+#record_word(word, start, word_end)\
+record_word:\
+	#move	$t0, $a0\
+	#li	$v0, SBRK			##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\
+	#li	$a0, 16\
+	#syscall\
+\
+	lw	$t0, alloc_offset\
+	add	$t2, $t0, 1\
+	sw	$t2, alloc_offset\
+	mul	$t0, $t0, 108\
+	la	$t1, alloc\
+	add	$v0, $t0, $t1\
+	\
+\
+\
+	sw	$t0, 0($v0)\
+	sw	$a1, 4($v0)\
+	sw	$a2, 8($v0)\
+	sw	$zero, 12($v0)\
+	lw	$t0, words_end\
+	sw	$v0, 0($t0)\
+	la	$t0, 12($v0)\
+	sw	$t0, words_end\
+	jr	$ra\
+\
+\
+\
+\
+\
+get_sector_center:\
+	rem	$v0, $a0, SECTORS_PER_ROW\
+	mul	$v0, $v0, SECTOR_SIZE\
+	add	$v0, $v0, SECTOR_HALF\
+\
+	sw	$v0, sector_center_return1\
+\
+	div	$v1, $a0, SECTORS_PER_ROW\
+	mul	$v1, $v1, SECTOR_SIZE\
+	add	$v1, $v1, SECTOR_HALF\
+		\
+	sw	$v1, sector_center_return2\
+\
+	jr	$ra\
+\
+\
+go_to_dust_helper:					# STATE 2\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+\
+	jal stay_on_path\
+	li	$t0,-1\
+	bne	$t0,$v0,go_to_dust_helper_not_finished\
+go_to_dust_helper_pud_wait:								#wait in order to cancel inertia\
+	add	$t0, $t0, 1\
+	blt	$t0, DUST_WAIT_CYCLES, go_to_dust_helper_pud_wait\
+\
+	#li	$a0, 10			#load coordinate\
+	#li	$a1, 10\
+	#jal	set_dest\
+\
+\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+\
+#	li	$t3,300\
+#	sub	$a0,$t3,$a0\
+#	sub	$a1,$t3,$a1\
+\
+	jal	set_dest\
+	la	$a2,chase_planet_helper\
+	jal execution_push\
+\
+#	la	$a2,hide_helper\
+#	jal execution_push\
+	\
+	\
+	j	go_to_dust_helper_end\
+go_to_dust_helper_not_finished:\
+   # correct path again in 300 cycles\
+    lw      $a0, TIMER\
+    add     $a0, $a0, MOVE_TIME_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, go_to_dust_helper\
+\
+    li	$a2,0\
+	li	$a3,0\
+	jal wait_heap_push\
+go_to_dust_helper_end:\
+\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr  $ra\
+\
+\
+\
+hide_helper:					# STATE 3\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+\
+	jal stay_on_path\
+	li	$t0,-1\
+	bne	$t0,$v0,hide_helper_not_finished\
+hide_helper_pud_wait:								#wait in order to cancel inertia\
+	add	$t0, $t0, 1\
+	blt	$t0, HIDE_WAIT_CYCLES, hide_helper_pud_wait\
+\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+	jal	set_dest\
+	la	$a2,chase_planet_helper\
+	jal execution_push\
+		\
+\
+	j	hide_helper_end\
+hide_helper_not_finished:\
+   # correct path again in 300 cycles\
+    lw      $a0, TIMER\
+    add     $a0, $a0, MOVE_TIME_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, hide_helper\
+\
+    li	$a2,0\
+	li	$a3,0\
+	jal wait_heap_push\
+hide_helper_end:\
+\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr  $ra\
+\
+\
+\
+find_best_sector_helper:				# STATE 1\
+\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+	\
+	\
+	#jal	find_best_sector			# set coord\
+	#move	$a0,$v0\
+	#jal	get_sector_center\
+\
+#	lw	$a0, sector_center_return1			#load coordinate\
+#	lw	$a1, sector_center_return2	\
+	#add	$a0,$a0,20\
+	#add	$a1,$a1,20\
+	#sw	$a0, sector_center_return1			#load coordinate\
+	#sw	$a1, sector_center_return2	\
+	\
+#	jal	set_dest\
+	#la	$a2, go_to_dust_helper\
+#	jal execution_push\
+\
+	#sw	$0,go_back_progress\
+\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+\
+	#li	$t3,300\
+	#sub	$a0,$t3,$a0\
+	#sub	$a1,$t3,$a1\
+\
+	jal	set_dest\
+	li	$a0, 0\
+	la	$a2,chase_planet_helper\
+	jal execution_push\
+\
+	\
+\
+	#lw      $a0, OTHER_BOT_X\
+	#lw      $a1, OTHER_BOT_Y\
+	\
+	#jal	set_dest\
+	#la	$a2,chase_planet_helper\
+	#jal execution_push\
+	#lw      $a0, TIMER\
+    #add     $a0, $a0, FIELD_ON_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+    #la      $a1, field_on\
+\
+	jal field_on\
+\
+	#jal wait_heap_push\
+\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr  $ra\
+\
+\
+\
+chase_planet_helper:				# STATE 2\
+	sub	$sp, $sp, 8\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+\
+chase_planet_start:\
+	move	$s0, $a0\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+\
+	beq	$s0,$0, chase_my_planet\
+	li	$t3,300\
+	sub	$a0,$t3,$a0\
+	sub	$a1,$t3,$a1\
+\
+chase_my_planet:\
+	\
+	sw      $a0, destx\
+    sw      $a1, desty\
+	\
+	li	$v0,0\
+	jal stay_on_path\
+	\
+	li	$t0,-1\
+	bne	$t0,$v0,chase_planet_helper_not_finished\
+	li	$v0,0\
+	#add	$s6,$s6,1\
+	li	$t0, CHASE_VELOCITY  \
+	sw   $t0, VELOCITY\
+	\
+	\
+\
+	\
+\
+\
+\
+\
+\
+	#li	$t1,1\
+	#sw	$t1, force_field_flag\
+	#li	$t0, DUST_FIELD_STRENGTH\
+	#sw	$t0, FIELD_STRENGTH\
+\
+	\
+	beq	$s0,$0, chase_planet_arrived\
+\
+\
+								# when you reach enemy planet!!!!!!!!!\
+	lw      $a0, TIMER							# comment this out to disable alert mode!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \
+    add     $a0, $a0,ALERT_DELAY_INTERVAL		#  time\
+	sw		$a0, TIMER\
+    la      $a1, check_rival_helper							\
+\
+	jal wait_heap_push\
+\
+	li	$s0,0\
+	\
+\
+	j	chase_planet_helper_not_finished\
+\
+chase_planet_arrived:	\
+		\
+	#lw	$t1, force_field_flag\
+	#beq	$t1,$0,chase_planet_off\
+ 	\
+	#lw      $a0, TIMER\
+   	#add     $a0, $a0, 10000\
+	#sw		$a0, TIMER    \
+    #la      $a1, field_off\
+    #move	$a2, $s0\
+	#jal 	wait_heap_push\
+\
+	#j	chase_planet_helper_not_finished\
+\
+#chase_planet_off:\
+		\
+	lw	$t1, blink_switch\
+	bne	$t1,$0,blink_skip\
+	li	$t1,1\
+	sw	$t1, blink_switch\
+	\
+\
+	lw      $a0, TIMER\
+   	add     $a0, $a0, BLINK_OFF_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, blink_helper\
+    move	$a2, $s0\
+	jal 	wait_heap_push\
+blink_skip:\
+\
+\
+#	bne $t3,$t1,chase_planet_helper_not_finished\
+	#bne $t3,$t1,chase_planet_start\
+\
+	#jal	field_off	\
+\
+	#la	$a2,find_best_sector_helper\
+	#jal execution_push			# push in one task\
+\
+	j	chase_planet_helper_not_finished\
+\
+	#j	chase_planet_helper_end\
+chase_planet_helper_not_finished:\
+\
+    #lw      $a0, TIMER\
+    #add     $a0, $a0, MOVE_TIME_INTERVAL\
+	#sw		$a0, TIMER    \
+    #la      $a1, chase_planet_helper\
+    #move	$a2, $s0\
+	#jal 	wait_heap_push\
+\
+	\
+	move	$a0, $s0	\
+	la      $a2, chase_planet_helper\
+	jal		execution_push\
+\
+chase_planet_helper_end:			\
+	lw	$s0, 4($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 8\
+	jr  $ra\
+\
+\
+\
+check_dust_helper:					# STATE 3\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+	\
+	lw	$t0, force_field_flag\
+	beq	$t0,$0,check_dust_helper_not_finished\
+\
+	la	$t0, bot_field_count\
+	sw	$t0, SPACESHIP_FIELD_CNT\
+	lw	$t1, 0($t0)\
+#	move	$s6,$t1\
+	li	$t2, DUST_THRESHOLD\
+	bge	$t2,$t1,check_dust_helper_not_finished\
+\
+\
+# when I got enough dust\
+# I stop what I'm doing right now\
+	jal execution_flush\
+	\
+\
+	#sw	$0,go_back_progress\
+	\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+\
+#	li	$t3,300\
+#	sub	$a0,$t3,$a0\
+#	sub	$a1,$t3,$a1\
+\
+	jal	set_dest\
+	li	$a0, 0\
+	la	$a2,chase_planet_helper\
+	jal execution_push	\
+\
+\
+ \
+\
+\
+	j	check_dust_helper_end\
+check_dust_helper_not_finished:\
+   # correct path again in 300 cycles\
+    #lw      $a0, TIMER\
+	\
+#    add     $a0, $a0, CHECK_DUST_TIME_INTERVAL		#  time\
+	#sw		$a0, TIMER\
+ #   la      $a1, check_dust_helper\
+\
+	#jal wait_heap_push\
+check_dust_helper_end:\
+\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr  $ra\
+\
+\
+check_rival_helper:					# STATE 4\
+	sub	$sp, $sp, 12\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	sw	$s1, 8($sp)\
+\
+	\
+\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$s0, 0($t0)\
+	lw	$s1, 4($t0)\
+	li	$t2,300\
+	sub	$s0,$t2,$s0\
+	sub	$s1,$t2,$s1\
+	\
+	lw      $t0, OTHER_BOT_X\
+    lw      $t1, OTHER_BOT_Y\
+\
+\
+sw	$0,PRINT_INT	\
+	sub	$t2,$t0,$s0\
+	abs	$t2,$t2\
+	#bge	$t2,ALERT_DISTANCE_1,check_rival_helper_not_finished\
+	mul	$t2,$t2,$t2\
+	\
+	sub	$t3,$t1,$s1\
+	abs	$t3,$t3\
+	#bge	$t3,ALERT_DISTANCE_1,check_rival_helper_not_finished\
+	mul	$t3,$t3,$t3\
+	\
+	add	$t0,$t2,$t3\
+\
+	bge	$t0,ALERT_DISTANCE_2,check_rival_helper_not_finished\
+\
+\
+\
+	lw	$t1,other_bot_old_distance_to_planet\
+sw	$t1,PRINT_INT		#old\
+	sw	$t0,other_bot_old_distance_to_planet\
+sw	$t0,PRINT_INT		#new\
+#	sub	$t0,$t0,60\
+	ble	$t1,$t0,check_rival_helper_not_finished\
+\
+\
+	\
+	lw      $t0, BOT_X\
+    lw      $t1, BOT_Y\
+	lw      $t2, OTHER_BOT_X\
+    lw      $t3, OTHER_BOT_Y\
+\
+\
+	sub	$t4,$t0,$t2\
+	abs	$t4,$t4\
+	#ble	$t2,ALERT_DISTANCE_1,check_rival_helper_not_finished\
+	mul	$t4,$t4,$t4\
+	\
+	sub	$t5,$t1,$t3\
+	abs	$t5,$t5\
+	#ble	$t3,ALERT_DISTANCE_1,check_rival_helper_not_finished\
+	mul	$t5,$t5,$t5\
+	\
+	add	$t0,$t4,$t5\
+	ble	$t0,ALERT_DISTANCE_3,check_rival_helper_not_finished\
+\
+\
+\
+\
+\
+	\
+	jal execution_flush\
+\
+	#jal	field_on\
+	#li	$t2,300\
+	#sub	$s0,$t2,$s0\
+	#sub	$s1,$t2,$s1\
+	\
+	#lw      $t0, BOT_X\
+    #lw      $t1, BOT_Y\
+\
+\
+	\
+	\
+	#sub	$t2,$t0,$s0\
+	#abs	$t2,$t2\
+	#ble	$t2,MY_DISTANCE_1,check_rival_helper_too_close\
+	#mul	$t2,$t2,$t2\
+	\
+#	sub	$t3,$t1,$s1\
+#	abs	$t3,$t3\
+	#ble	$t3,MY_DISTANCE_1,check_rival_helper_too_close\
+#	mul	$t3,$t3,$t3\
+	\
+#	add	$t0,$t2,$t3\
+#	ble	$t0,MY_DISTANCE_2,check_rival_helper_too_close\
+\
+	#lw	$t0, TIMER\
+\
+#	jal	field_off\
+	\
+		\
+#check_rival_helper_too_close:\
+		\
+jal	field_off\
+	li	$a0,1\
+	\
+	la	$a2,chase_planet_helper	\
+	jal execution_push			# push in one task\
+\
+\
+\
+\
+    lw      $a0, TIMER\
+    add     $a0, $a0, FIELD_ON_TIME_INTERVAL	#  time\
+	sw		$a0, TIMER\
+    la      $a1, field_on\
+\
+	jal wait_heap_push\
+\
+\
+\
+	j	check_rival_helper_end\
+check_rival_helper_not_finished:\
+   # correct path again in 300 cycles\
+    lw      $a0, TIMER\
+    add     $a0, $a0, ALERT_INTERVAL		#  time\
+	sw		$a0, TIMER\
+    la      $a1, check_rival_helper\
+\
+	jal wait_heap_push\
+check_rival_helper_end:\
+	lw	$s0, 4($sp)\
+	lw	$s1, 8($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 12\
+	jr  $ra\
+\
+\
+\
+\
+solve_puzzle_helper:\
+	jal checkpoint_0\
+\
+	la	$a2,solve_puzzle_helper\
+	jal execution_push\
+	jr	$ra\
+\
+\
+is_single_mode_helper:\
+	sub	$sp,$sp,4\
+	sw	$ra,0($sp)	\
+	lw      $t0, OTHER_BOT_X\
+    lw      $t1, OTHER_BOT_Y\
+	li	$t2,150\
+	bne		$t0,$t2,is_not_single\
+	bne		$t1,$t2,is_not_single\
+	jal	execution_flush\
+\
+	la	$a2,find_best_sector_helper_B\
+	jal execution_push\
+is_not_single:\
+	\
+	lw	$ra,0($sp)\
+	add	$sp,$sp,4\
+	\
+	jr	$ra\
+\
+\
+\
+\
+find_best_sector_helper_B:				# STATE 1\
+\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+	\
+	\
+	jal	find_best_sector			# set coord\
+	move	$a0,$v0\
+	jal	get_sector_center\
+\
+	lw	$a0, sector_center_return1			#load coordinate\
+	lw	$a1, sector_center_return2	\
+\
+	\
+	jal	set_dest\
+\
+	\
+	li	$a0,1\
+	la	$a2,go_to_dust_helper_B\
+	jal execution_push\
+\
+\
+	sw	$0,go_back_progress\
+\
+\
+	lw      $a0, TIMER\
+    add     $a0, $a0, FIELD_ON_TIME_INTERVAL		#  time\
+	sw		$a0, TIMER\
+    la      $a1, field_on\
+\
+	jal wait_heap_push\
+\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr  $ra\
+\
+\
+\
+\
+\
+\
+\
+go_to_dust_helper_B:				# STATE 2\
+	sub	$sp, $sp, 8\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+	\
+	\
+go_to_dust_start_B:\
+	\
+\
+\
+	lw	$a0, sector_center_return1			#load coordinate\
+	lw	$a1, sector_center_return2	\
+\
+	sw      $a0, destx\
+    sw      $a1, desty\
+	li	$v0,0\
+	jal stay_on_path\
+	\
+	li	$t0,-1\
+	bne	$t0,$v0,go_to_dust_helper_not_finished_B\
+	li	$v0,0\
+\
+	li	$t0, CHASE_VELOCITY  \
+	sw   $t0, VELOCITY\
+	\
+\
+go_to_dust_arrived_B:	\
+	la	$t2,go_back_progress\
+	lw	$t1,0($t2)\
+	li	$t3,GO_BACK_WAIT_CYCLE	\
+	add	$t1,$t1,1\
+	sw	$t1,0($t2)\
+	\
+\
+\
+	bne $t3,$t1,go_to_dust_start_B\
+\
+\
+\
+	sw	$0,go_back_progress\
+	la	$a2,chase_planet_helper_B\
+	jal execution_push\
+	\
+\
+	j	go_to_dust_helper_end_B\
+go_to_dust_helper_not_finished_B:\
+\
+    lw      $a0, TIMER\
+    add     $a0, $a0, MOVE_TIME_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, go_to_dust_helper_B\
+    move	$a2, $s0\
+	jal 	wait_heap_push\
+go_to_dust_helper_end_B:			\
+	lw	$s0, 4($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 8\
+	jr  $ra\
+\
+\
+\
+\
+\
+\
+\
+chase_planet_helper_B:				# STATE 2\
+	sub	$sp, $sp, 8\
+	sw	$ra, 0($sp)\
+	sw	$s0, 4($sp)\
+\
+chase_planet_start_B:\
+	#move	$s0, $a0\
+	la	$t0, planets\
+	sw	$t0, PLANETS_REQUEST\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+\
+	\
+	sw      $a0, destx\
+    sw      $a1, desty\
+	li	$v0,0\
+	jal stay_on_path\
+	\
+	li	$t0,-1\
+	bne	$t0,$v0,chase_planet_helper_not_finished_B\
+	li	$v0,0\
+	#add	$s6,$s6,1\
+	li	$t0, CHASE_VELOCITY  \
+	sw   $t0, VELOCITY\
+	\
+	\
+	#la	$a2,check_dust_helper\
+	#jal execution_push\
+\
+\
+\
+	#li	$t1,1\
+	#sw	$t1, force_field_flag\
+	#li	$t0, DUST_FIELD_STRENGTH\
+	#sw	$t0, FIELD_STRENGTH\
+\
+	\
+	#beq	$s0,$0, chase_planet_arrived\
+\
+	#j	chase_planet_helper_not_finished\
+\
+chase_planet_arrived_B:	\
+	la	$t2,go_back_progress\
+	lw	$t1,0($t2)\
+	li	$t3,GO_BACK_WAIT_CYCLE	\
+	add	$t1,$t1,1\
+	sw	$t1,0($t2)\
+	\
+\
+#	bne $t3,$t1,chase_planet_helper_not_finished\
+	bne $t3,$t1,chase_planet_start_B\
+\
+	jal	field_off	\
+\
+	la	$a2,find_best_sector_helper_B\
+	jal execution_push			# push in one task\
+\
+	#la      $a2, solve_puzzle_helper\
+    #jal 	execution_push\
+\
+	j	chase_planet_helper_end_B\
+chase_planet_helper_not_finished_B:\
+\
+    lw      $a0, TIMER\
+    add     $a0, $a0, MOVE_TIME_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, chase_planet_helper_B\
+    move	$a2, $s0\
+	jal 	wait_heap_push\
+chase_planet_helper_end_B:			\
+	lw	$s0, 4($sp)\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 8\
+	jr  $ra\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+blink_helper:\
+	sub	$sp,$sp,4\
+	sw	$ra,0($sp)\
+\
+	jal	field_off\
+	lw      $a0, TIMER\
+   	add     $a0, $a0, BLINK_ON_INTERVAL\
+	sw		$a0, TIMER    \
+    la      $a1, field_on\
+    move	$a2, $s0\
+	jal 	wait_heap_push\
+\
+	\
+	lw	$ra,0($sp)\
+	add	$sp,$sp,4\
+	jr	$ra\
+	\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+\
+execution_flush:\
+	sub	$sp,$sp,4\
+	sw	$ra,0($sp)\
+	lw	$t1,execution_tail\
+	sw	$t1,execution_head	\
+wait_heap_flush:\
+	sw	$0,wait_heap_size\
+	\
+la      $a2, solve_puzzle_helper\
+    jal 	execution_push\
+\
+	lw	$ra,0($sp)\
+	add	$sp,$sp,4\
+	jr	$ra\
+\
+\
+# a2 address\
+# a0 a1 parameter\
+\
+execution_push:	\
+	lw	$t0,execution_tail\
+	la	$t1,execution_array\
+	add	$t0,$t0,$t1\
+	sw	$a0, 0($t0)\
+	sw	$a1, 4($t0)\
+	sw	$a2, 8($t0)\
+	\
+\
+	lw	$t0, execution_tail\
+	add	$t0, $t0, EXECUTION_ARRAY_BLOCK\
+	rem	$t0, $t0, EXECUTION_ARRAY_SIZE\
+	sw	$t0, execution_tail\
+\
+	jr	$ra\
+\
+execution_pop:\
+	lw	$t0,execution_head\
+	la	$t1,execution_array\
+	add	$t0,$t0,$t1\
+	lw	$a0, 0($t0)\
+	lw	$a1, 4($t0)\
+	lw	$a2, 8($t0)\
+\
+\
+	lw	$t0, execution_head\
+	add	$t0, $t0, EXECUTION_ARRAY_BLOCK\
+	rem	$t0, $t0, EXECUTION_ARRAY_SIZE\
+	sw	$t0, execution_head\
+	jr	$ra\
+\
+field_on:\
+	sw	$0, blink_switch\
+	li	$t1,1\
+	sw	$t1, force_field_flag\
+	li	$t0, DUST_FIELD_STRENGTH\
+	sw	$t0, FIELD_STRENGTH\
+\
+	jr	$ra\
+\
+field_off:\
+	sw	$0, force_field_flag\
+	sw	$0, FIELD_STRENGTH\
+	jr	$ra\
+\
+# main #################################################################\
+#\
+\
+main:\
+	sub	$sp, $sp, 4\
+	sw	$ra, 0($sp)\
+\
+	sw	$zero, VELOCITY\
+	li	$t0, SCAN_MASK\
+	or	$t0, $t0, TIMER_MASK		# timer interrupt enable bit\
+	or	$t0, $t0, ENERGY_MASK	#  interrupt bit\
+	or	$t0, $t0, BONK_MASK		# global interrupt enable\
+	or	$t0, $t0, INTERFERENCE_MASK \
+	or	$t0, $t0, 1\
+	mtc0	$t0, $12\
+\
+\
+	sw	$zero, wait_heap_size\
+	li	$t1,1\
+	sw	$t1, time_interrupt_flag\
+	sw	$zero, execution_head	#initialize the execution queue\
+	sw	$zero, execution_tail\
+\
+	\
+\
+								# when you reach enemy planet!!!!!!!!!\
+	\
+\
+ #	lw      $a0, TIMER\
+ #   add     $a0, $a0, SOLVE_PUZZLE_TIME_INTERVAL		#  time\
+#	sw		$a0, TIMER\
+#    la      $a1, solve_puzzle_helper#\
+#	jal wait_heap_push\
+\
+	la	$a2,find_best_sector_helper\
+	jal execution_push		\
+	\
+#	jal	field_on\
+\
+#	li	$a0,0\
+#	la	$a2,chase_planet_helper\
+#	jal execution_push		\
+\
+	lw      $a0, TIMER							# comment this out to disable alert mode!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! \
+    add     $a0, $a0, ALERT_DELAY_INTERVAL		#  thelperhelperime\
+	sw		$a0, TIMER\
+    la      $a1, check_rival_helper	\
+	jal		wait_heap_push\
+\
+\
+\
+	lw      $a0, TIMER	\
+    add     $a0, $a0, 500000		#  thelperhelperime\
+	sw		$a0, TIMER\
+    la      $a1, is_single_mode_helper\
+	\
+	jal		wait_heap_push\
+\
+\
+	jal solve_puzzle\
+	#la	$a2,solve_puzzle_helper\
+	#jal execution_push\
+	\
+\
+			# push in one task\
+\
+\
+loop:\
+#	lw	$t0,wait_heap_size	\
+#sw	$t0, PRINT_INT\
+\
+	lw	$t1, time_interrupt_flag\
+	bne	$t1, $zero, time_interrupt_miss\
+\
+	li	$t1,1\
+	sw	$t1, time_interrupt_flag\
+	\
+pop_wait_heap:\
+\
+	lw	$t0,wait_heap_size\
+	beq	$t0,$zero,time_interrupt_miss\
+		\
+	jal	wait_heap_peek\
+	lw	$t0, TIMER		# read current time	\
+	blt	$t0, $a0, time_interrupt_miss\
+	\
+	jal	wait_heap_pop\
+	move	$a0,$a2\
+	move	$a2,$a1\
+	move	$a1,$a3\
+	\
+	jal	execution_push\
+	\
+	j	pop_wait_heap\
+time_interrupt_miss:\
+	\
+	lw	$t0,execution_head\
+	lw	$t1,execution_tail\
+	beq	$t0,$t1,loop\
+	\
+\
+	jal execution_pop\
+	beq	$a2,$zero, loop\
+	\
+	jalr	$a2\
+	\
+	j	loop\
+\
+	# never reached, but included for completeness\
+	lw	$ra, 0($sp)\
+	add	$sp, $sp, 4\
+	jr	$ra\
+\
+\
+\
+\
+# interrupt handler ####################################################\
+#\
+\
+.kdata				# interrupt handler data (separated just for readability)\
+chunkIH:	.space 8	# space for two registers\
+non_intrpt_str:	.asciiz "Non-interrupt exception\\n"\
+unhandled_str:	.asciiz "Unhandled interrupt type\\n"\
+\
+\
+.ktext 0x80000180\
+interrupt_handler:\
+.set noat\
+	move	$k1, $at		# Save $at                               \
+.set at\
+	la	$k0, chunkIH\
+	sw	$a0, 0($k0)		# Get some free registers                  \
+	sw	$v0, 4($k0)		# by storing them to a global variable     \
+\
+	mfc0	$k0, $13		# Get Cause register                       \
+	srl	$a0, $k0, 2                \
+	and	$a0, $a0, 0xf		# ExcCode field                            \
+	bne	$a0, 0, non_intrpt         \
+\
+interrupt_dispatch:			# Interrupt:                             \
+	mfc0	$k0, $13		# Get Cause register, again                 \
+	beq	$k0, 0, done		# handled all outstanding interrupts     \
+\
+	and	$a0, $k0, SCAN_MASK	# is there a scan interrupt?                \
+	bne	$a0, 0, scan_interrupt\
+\
+	and	$a0, $k0, BONK_MASK	# is there a bonk interrupt?                \
+	bne	$a0, 0, bonk_interrupt   \
+	\
+	and	$a0, $k0, TIMER_MASK	# is there a timer interrupt?\
+	bne	$a0, 0, timer_interrupt\
+\
+	and	$a0, $k0, INTERFERENCE_MASK\
+	bne	$a0, 0, interference_interrupt\
+\
+	and	$a0, $k0, ENERGY_MASK\
+	bne	$a0, 0, energy_interrupt\
+\
+	# add dispatch for other interrupt types here.\
+	j	done\
+\
+scan_interrupt:\
+	sw	$zero, SCAN_ACKNOWLEDGE	# acknowledge interrupt\
+	li	$k0, 1\
+	sw	$k0, scan_done		# set global variable\
+	j	interrupt_dispatch	# see if other interrupts are waiting\
+\
+bonk_interrupt:\
+	sw	$zero, VELOCITY		# ???\
+	sw	$a1, BONK_ACK	# acknowledge interrupt\
+\
+	j	interrupt_dispatch	# see if other interrupts are waiting\
+\
+interference_interrupt:\
+	sw	$a1, INTERFERENCE_ACK	# acknowledge interru\
+	j	interrupt_dispatch\
+\
+timer_interrupt:\
+	sw	$a1, TIMER_ACK	# acknowledge interrupt\
+	sw	$zero, time_interrupt_flag\
+	j	interrupt_dispatch\
+\
+energy_interrupt:\
+	sw	$a1, ENERGY_ACKNOWLEDGE	# acknowledge interrupt\
+	j	interrupt_dispatch\
+\
+\
+\
+non_intrpt:				# was some non-interrupt\
+	#li	$v0, PRINT_STRING\
+	#la	$a0, non_intrpt_str\
+	#syscall				# print out an error message\
+	# fall through to done\
+\
+done:\
+	la	$k0, chunkIH\
+	lw	$a0, 0($k0)		# Restore saved registers\
+	lw	$v0, 4($k0)\
+.set noat\
+	move	$at, $k1		# Restore $at\
+.set at \
+	eret\
+}
